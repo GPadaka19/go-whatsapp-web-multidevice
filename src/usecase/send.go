@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"mime"
 	"net/http"
 	"os"
 	"os/exec"
@@ -341,7 +342,7 @@ func (service serviceSend) SendFile(ctx context.Context, request domainSend.File
 	}
 
 	fileBytes := helpers.MultipartFormFileHeaderToBytes(request.File)
-	fileMimeType := http.DetectContentType(fileBytes)
+	fileMimeType := resolveDocumentMIME(request.File.Filename, fileBytes)
 
 	// Send to WA server
 	uploadedFile, err := service.uploadMedia(ctx, whatsmeow.MediaDocument, fileBytes, dataWaRecipient)
@@ -389,6 +390,21 @@ func (service serviceSend) SendFile(ctx context.Context, request domainSend.File
 	response.MessageID = ts.ID
 	response.Status = fmt.Sprintf("Document sent to %s (server timestamp: %s)", request.BaseRequest.Phone, ts.Timestamp.String())
 	return response, nil
+}
+
+func resolveDocumentMIME(filename string, fileBytes []byte) string {
+	extension := strings.ToLower(filepath.Ext(filename))
+	if extension != "" {
+		if mimeType, ok := utils.KnownDocumentMIMEByExtension(extension); ok {
+			return mimeType
+		}
+
+		if mimeType := mime.TypeByExtension(extension); mimeType != "" {
+			return mimeType
+		}
+	}
+
+	return http.DetectContentType(fileBytes)
 }
 
 func (service serviceSend) SendVideo(ctx context.Context, request domainSend.VideoRequest) (response domainSend.GenericResponse, err error) {
@@ -840,7 +856,7 @@ func (service serviceSend) SendPresence(ctx context.Context, request domainSend.
 		return response, err
 	}
 
-	err = whatsapp.GetClient().SendPresence(types.Presence(request.Type))
+	err = whatsapp.GetClient().SendPresence(ctx, types.Presence(request.Type))
 	if err != nil {
 		return response, err
 	}
@@ -878,7 +894,7 @@ func (service serviceSend) SendChatPresence(ctx context.Context, request domainS
 		return response, fmt.Errorf("invalid action: %s. Must be 'start' or 'stop'", request.Action)
 	}
 
-	err = whatsapp.GetClient().SendChatPresence(userJid, presenceType, "")
+	err = whatsapp.GetClient().SendChatPresence(ctx, userJid, presenceType, types.ChatPresenceMedia(""))
 	if err != nil {
 		return response, err
 	}
