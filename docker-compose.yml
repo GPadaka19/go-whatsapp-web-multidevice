@@ -13,6 +13,12 @@ services:
       - "3006:3006"
     env_file:
       - src/.env
+    networks:
+      - pln-bot-network
+
+networks:
+  pln-bot-network:
+    external: true
 
 
 # services:
